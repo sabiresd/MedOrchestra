@@ -1,0 +1,27 @@
+{
+  "name": "Agent Triage SIH",
+  "description": "Agent 1 — Triage et Exécution (SIH). Récupère et valide le dossier patient, délègue l'expertise au Pharmacologue (Agent 2), puis applique le verdict : APPROVED -> valider_ordonnance, CRITICAL_ALERT -> bloquer_preparation_pilulier + envoyer_sms_medecin.",
+  "version": "1.0.0",
+  "role": "orchestrateur",
+  "endpoint": "https://stg-agentic.abafusion.ai/api/v1/webhook/07436be3-9a5a-4872-8b4a-d20e47853b61",
+  "capabilities": {
+    "a2a": true,
+    "streaming": false,
+    "actions": ["discover", "delegate"]
+  },
+  "skills": [
+    "triage_ordonnance",
+    "validation_dossier_patient",
+    "delegation_expertise",
+    "execution_verdict",
+    "notification_medecin"
+  ],
+  "mcp_server": "SIH_Pharma_MCP",
+  "mcp_tools": [
+    { "name": "recuperer_dossier_patient", "permission": "lecture" },
+    { "name": "valider_ordonnance", "permission": "ecriture" },
+    { "name": "bloquer_preparation_pilulier", "permission": "ecriture" },
+    { "name": "envoyer_sms_medecin", "permission": "ecriture_externe" }
+  ],
+  "delegates_to": "Agent Pharmacologue"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Agent Pharmacologue",
+  "description": "Agent 2 — Pharmacologue Expert. Reçoit une demande d'expertise (webhook), analyse les interactions médicamenteuses (analyser_interactions), recherche une alternative thérapeutique en cas de risque majeur (rechercher_alternative), puis renvoie un verdict APPROVED ou CRITICAL_ALERT.",
+  "version": "1.0.0",
+  "role": "expert",
+  "endpoint": "https://stg-agentic.abafusion.ai/api/v1/webhook/c4fd45c5-7643-4b78-823b-bed1d6466bce",
+  "capabilities": {
+    "a2a": true,
+    "streaming": false,
+    "actions": ["discover", "delegate"]
+  },
+  "skills": [
+    "interactions_medicamenteuses",
+    "pharmacologie",
+    "posologie",
+    "alternative_therapeutique"
+  ],
+  "mcp_server": "SIH_Pharma_MCP",
+  "mcp_tools": [
+    { "name": "analyser_interactions", "permission": "lecture" },
+    { "name": "rechercher_alternative", "permission": "lecture" }
+  ],
+  "verdicts": ["APPROVED", "CRITICAL_ALERT"]
+}
