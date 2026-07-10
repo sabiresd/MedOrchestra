@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interoperable Agent Hub — Validation d'ordonnances</title>
+<style>
+  :root{
+    --bg:#eef2f4; --card:#ffffff; --ink:#12313a; --muted:#5b7480; --line:#d7e0e4;
+    --teal:#1f8a8a; --teal-d:#155e63; --blue:#2f6df5;
+    --ok:#159a5b; --ok-bg:#e3f6ec; --crit:#d63a3a; --crit-bg:#fde7e7;
+    --warn:#c07a15; --warn-bg:#fbf0dc; --idle:#8aa1ab;
+    --a1:#1f8a8a; --a2:#6b46c1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}
+  header{background:linear-gradient(100deg,var(--teal-d),var(--teal));color:#fff;
+    padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  header h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.2px}
+  header .sub{opacity:.85;font-size:12px;margin-top:2px}
+  .live{display:flex;align-items:center;gap:8px;font-size:12px;background:rgba(255,255,255,.14);
+    padding:6px 12px;border-radius:20px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#7CFFB0;box-shadow:0 0 0 0 rgba(124,255,176,.7);
+    animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(124,255,176,.7)}70%{box-shadow:0 0 0 8px rgba(124,255,176,0)}100%{box-shadow:0 0 0 0 rgba(124,255,176,0)}}
+  main{padding:18px 24px;max-width:1360px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .n{font-size:26px;font-weight:800}
+  .kpi .l{color:var(--muted);font-size:12px;margin-top:2px}
+  .kpi.crit .n{color:var(--crit)} .kpi.ok .n{color:var(--ok)}
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .card h2{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  /* --- Simulation BPMN --- */
+  .simwrap{overflow-x:auto}
+  .canvas{position:relative;width:1260px;height:470px;margin:0 auto}
+  .lane{position:absolute;left:0;right:0;border:1px dashed var(--line);border-radius:10px}
+  .lane .lab{position:absolute;top:8px;left:10px;font-size:11px;font-weight:700;letter-spacing:.4px;
+    color:#fff;padding:3px 9px;border-radius:6px}
+  .lane1{top:4px;height:212px;background:rgba(31,138,138,.04)}
+  .lane2{top:230px;height:224px;background:rgba(107,70,193,.05)}
+  .lane1 .lab{background:var(--a1)} .lane2 .lab{background:var(--a2)}
+  svg.wires{position:absolute;inset:0;width:1260px;height:470px;pointer-events:none}
+  .node{position:absolute;border:2px solid var(--line);background:#fff;border-radius:10px;
+    padding:6px 8px;display:flex;flex-direction:column;justify-content:center;
+    box-shadow:0 1px 2px rgba(0,0,0,.05);transition:.25s;z-index:2}
+  .node .t{font-size:11px;font-weight:700;line-height:1.15}
+  .node .s{font-size:10px;color:var(--muted);margin-top:2px;font-family:ui-monospace,Consolas,monospace}
+  .node .ic{position:absolute;top:-9px;left:-9px;width:20px;height:20px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--teal);color:#fff}
+  .node.gw{border-radius:8px;border-style:dashed;text-align:center;align-items:center}
+  .node.gw .ic{background:#e0a300}
+  .node.mcp .ic{background:var(--teal)} .node.msg .ic{background:#3b6fd4}
+  .node.end .ic{background:#556} .node.event .ic{background:#556}
+  .node.task .ic{background:#6b46c1}
+  .node.active{border-color:var(--blue);box-shadow:0 0 0 4px rgba(47,109,245,.18);transform:translateY(-1px)}
+  .node.done{border-color:var(--teal)}
+  .node.done.bad{border-color:var(--crit)} .node.done.good{border-color:var(--ok)}
+  .node.dim{opacity:.45}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+  .b-crit{background:var(--crit-bg);color:var(--crit)} .b-ok{background:var(--ok-bg);color:var(--ok)}
+  .b-warn{background:var(--warn-bg);color:var(--warn)} .b-idle{background:#eef1f2;color:var(--muted)}
+  .controls{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;
+    cursor:pointer;font-weight:600}
+  button.primary{background:var(--teal);color:#fff;border-color:var(--teal)}
+  button:hover{filter:brightness(.97)}
+  .steplog{margin-top:10px;font-size:12px;color:var(--muted);min-height:18px}
+  /* --- Runs list --- */
+  .runs{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto}
+  .run{border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;transition:.15s}
+  .run:hover{border-color:var(--teal);background:#f7fbfb}
+  .run.sel{border-color:var(--blue);background:#f2f6ff}
+  .run .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .run .cid{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--muted)}
+  .run .meta{font-size:11px;color:var(--muted);margin-top:3px}
+  /* --- Journal + prescriptions --- */
+  .strip{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .pill{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;background:#fff}
+  .pill b{font-family:ui-monospace,Consolas,monospace}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  td.mono,.cid{font-family:ui-monospace,Consolas,monospace}
+  .tag{font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700}
+  .tag.a1{background:rgba(31,138,138,.12);color:var(--a1)} .tag.a2{background:rgba(107,70,193,.12);color:var(--a2)}
+  .perm{font-size:10px;padding:2px 6px;border-radius:5px;background:#eef1f2;color:var(--muted)}
+  .perm.w{background:var(--warn-bg);color:var(--warn)} .perm.x{background:var(--crit-bg);color:var(--crit)}
+  .ok-i{color:var(--ok)} .err-i{color:var(--crit)}
+  .empty{color:var(--muted);padding:20px;text-align:center}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Interoperable Agent Hub · Co-Pilote de validation d'ordonnances</h1>
+    <div class="sub">Agent 1 — Triage &amp; Exécution (SIH) ⇆ Agent 2 — Pharmacologue Expert · protocole MCP</div>
+  </div>
+  <div class="live"><span class="dot"></span><span id="liveTxt">En direct</span></div>
+</header>
+
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="n" id="kRuns">0</div><div class="l">Ordonnances traitées</div></div>
+    <div class="kpi crit"><div class="n" id="kCrit">0</div><div class="l">Alertes critiques (bloquées)</div></div>
+    <div class="kpi ok"><div class="n" id="kOk">0</div><div class="l">Traitements validés</div></div>
+    <div class="kpi"><div class="n" id="kCalls">0</div><div class="l">Appels d'outils MCP</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Simulation du parcours BPMN</h2>
+      <div class="simwrap">
+        <div class="canvas" id="canvas">
+          <div class="lane lane1"><span class="lab">AGENT 1 — TRIAGE &amp; EXÉCUTION (SIH)</span></div>
+          <div class="lane lane2"><span class="lab">AGENT 2 — PHARMACOLOGUE EXPERT</span></div>
+          <svg class="wires" id="wires"></svg>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="primary" id="btnReplay">▶ Rejouer</button>
+        <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="autoLive" checked> Suivre en direct</label>
+        <span id="verdictBadge"></span>
+      </div>
+      <div class="steplog" id="steplog">Sélectionnez une exécution à droite, ou lancez <code>python test_workflow.py</code>.</div>
+    </div>
+
+    <div class="card">
+      <h2>Historique des exécutions</h2>
+      <div class="runs" id="runs"><div class="empty">Aucune exécution pour le moment.</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>État des ordonnances (MongoDB · sih_mcp_db)</h2>
+    <div class="strip" id="presc"><div class="empty">—</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Journal des appels d'outils (journal_mcp.json)</h2>
+    <table>
+      <thead><tr><th>Heure</th><th>Corrélation</th><th>Agent</th><th>Outil</th><th>Permission</th><th>Statut</th></tr></thead>
+      <tbody id="journal"><tr><td colspan="6" class="empty">Journal vide.</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+// ---------- Définition du graphe BPMN ----------
+const NODES = [
+  // lane 1
+  {id:'a1_start', x:16,  y:88,  w:96,  h:46, type:'event', ic:'▶', t:'Ordonnance soumise'},
+  {id:'a1_recup', x:128, y:88,  w:150, h:46, type:'mcp',   ic:'⚙', t:'Récupérer dossier', s:'recuperer_dossier_patient'},
+  {id:'a1_gwvalid',x:290,y:86,  w:104, h:50, type:'gw',    ic:'◇', t:'Données valides ?'},
+  {id:'a1_echec', x:288, y:10,  w:150, h:42, type:'end',   ic:'✕', t:'Échec : dossier incomplet', cls:'bad'},
+  {id:'a1_send',  x:414, y:88,  w:132, h:46, type:'msg',   ic:'✉', t:'Envoyer demande d\'expertise'},
+  {id:'a1_gwverd',x:588, y:86,  w:110, h:50, type:'gw',    ic:'◇', t:'Analyse du verdict'},
+  {id:'a1_block', x:716, y:18,  w:150, h:46, type:'mcp',   ic:'⚙', t:'Bloquer pilulier', s:'bloquer_preparation_pilulier', cls:'bad'},
+  {id:'a1_sms',   x:884, y:18,  w:140, h:46, type:'mcp',   ic:'⚙', t:'SMS médecin', s:'envoyer_sms_medecin', cls:'bad'},
+  {id:'a1_reject',x:1052,y:20,  w:150, h:44, type:'end',   ic:'●', t:'Ordonnance rejetée sûre', cls:'bad'},
+  {id:'a1_valid', x:726, y:150, w:150, h:46, type:'mcp',   ic:'⚙', t:'Valider ordonnance', s:'valider_ordonnance', cls:'good'},
+  {id:'a1_okend', x:1052,y:150, w:150, h:44, type:'end',   ic:'●', t:'Traitement validé', cls:'good'},
+  // lane 2
+  {id:'a2_start',  x:414, y:330, w:132, h:46, type:'event', ic:'▶', t:'Demande d\'expertise reçue'},
+  {id:'a2_analyse',x:566, y:330, w:150, h:46, type:'mcp',   ic:'⚙', t:'Analyser interactions', s:'analyser_interactions'},
+  {id:'a2_gwrisk', x:734, y:328, w:104, h:50, type:'gw',    ic:'◇', t:'Risque majeur ?'},
+  {id:'a2_alt',    x:856, y:250, w:150, h:46, type:'mcp',   ic:'⚙', t:'Rechercher alternative', s:'rechercher_alternative', cls:'bad'},
+  {id:'a2_crit',   x:1020,y:252, w:180, h:46, type:'task',  ic:'▤', t:'Payload CRITICAL_ALERT + Alternative', cls:'bad'},
+  {id:'a2_appr',   x:856, y:400, w:150, h:44, type:'task',  ic:'▤', t:'Payload APPROVED', cls:'good'},
+  {id:'a2_report', x:1052,y:330, w:150, h:46, type:'msg',   ic:'✉', t:'Renvoyer rapport à Agent 1'},
+];
+const EDGES = [
+  ['a1_start','a1_recup'],['a1_recup','a1_gwvalid'],['a1_gwvalid','a1_echec','bad'],
+  ['a1_gwvalid','a1_send'],['a1_send','a2_start','cross'],
+  ['a2_start','a2_analyse'],['a2_analyse','a2_gwrisk'],
+  ['a2_gwrisk','a2_alt'],['a2_alt','a2_crit'],['a2_gwrisk','a2_appr'],
+  ['a2_crit','a2_report'],['a2_appr','a2_report'],
+  ['a2_report','a1_gwverd','cross'],
+  ['a1_gwverd','a1_block'],['a1_block','a1_sms'],['a1_sms','a1_reject'],
+  ['a1_gwverd','a1_valid'],['a1_valid','a1_okend'],
+];
+const N = Object.fromEntries(NODES.map(n=>[n.id,n]));
+const C = id => ({x:N[id].x+N[id].w/2, y:N[id].y+N[id].h/2});
+
+function buildGraph(){
+  const canvas=document.getElementById('canvas');
+  NODES.forEach(n=>{
+    const d=document.createElement('div');
+    d.className='node '+n.type+(n.cls?' '+n.cls:''); d.id='n_'+n.id;
+    d.style.left=n.x+'px'; d.style.top=n.y+'px'; d.style.width=n.w+'px'; d.style.minHeight=n.h+'px';
+    d.innerHTML=`<span class="ic">${n.ic}</span><span class="t">${n.t}</span>`+(n.s?`<span class="s">${n.s}()</span>`:'');
+    canvas.appendChild(d);
+  });
+  const svg=document.getElementById('wires');
+  svg.innerHTML=`<defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 Z" fill="#9fb3bb"/></marker>
+    <marker id="ahA" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 Z" fill="#2f6df5"/></marker></defs>`;
+  EDGES.forEach(([a,b,kind])=>{
+    const p=C(a),q=C(b);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',p.x);l.setAttribute('y1',p.y);l.setAttribute('x2',q.x);l.setAttribute('y2',q.y);
+    l.setAttribute('stroke','#9fb3bb');l.setAttribute('stroke-width','1.6');
+    l.setAttribute('marker-end','url(#ah)');l.id='e_'+a+'__'+b;
+    if(kind==='cross')l.setAttribute('stroke-dasharray','5 4');
+    svg.appendChild(l);
+  });
+}
+function edgeEl(a,b){return document.getElementById('e_'+a+'__'+b);}
+
+// ---------- Séquence de parcours selon le verdict ----------
+function seqFor(run){
+  if(run.verdict==='DOSSIER_INCOMPLET' || run.dossier_valide===false)
+    return ['a1_start','a1_recup','a1_gwvalid','a1_echec'];
+  const base=['a1_start','a1_recup','a1_gwvalid','a1_send','a2_start','a2_analyse','a2_gwrisk'];
+  if(run.verdict==='CRITICAL_ALERT')
+    return base.concat(['a2_alt','a2_crit','a2_report','a1_gwverd','a1_block','a1_sms','a1_reject']);
+  if(run.verdict==='APPROVED')
+    return base.concat(['a2_appr','a2_report','a1_gwverd','a1_valid','a1_okend']);
+  return base; // EN_COURS
+}
+
+let replayToken=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function resetGraph(){
+  NODES.forEach(n=>{const e=document.getElementById('n_'+n.id);e.classList.remove('active','done');e.classList.add('dim');});
+  EDGES.forEach(([a,b])=>{const e=edgeEl(a,b);e.setAttribute('stroke','#9fb3bb');e.setAttribute('marker-end','url(#ah)');e.setAttribute('stroke-width','1.6');});
+}
+async function replay(run){
+  const tok=++replayToken;
+  resetGraph();
+  const seq=seqFor(run);
+  setVerdict(run);
+  for(let i=0;i<seq.length;i++){
+    if(tok!==replayToken)return;
+    const id=seq[i], el=document.getElementById('n_'+id);
+    el.classList.remove('dim'); el.classList.add('active');
+    if(i>0){const e=edgeEl(seq[i-1],id);if(e){e.setAttribute('stroke','#2f6df5');e.setAttribute('marker-end','url(#ahA)');e.setAttribute('stroke-width','2.4');}}
+    const n=N[id];
+    document.getElementById('steplog').innerHTML=
+      `Étape ${i+1}/${seq.length} — <b>${n.t}</b>`+(n.s?` · <code>${n.s}()</code>`:'');
+    await sleep(560);
+    if(tok!==replayToken)return;
+    el.classList.remove('active'); el.classList.add('done');
+  }
+  if(tok===replayToken)
+    document.getElementById('steplog').innerHTML=`Parcours terminé — verdict <b>${run.verdict}</b>.`;
+}
+function setVerdict(run){
+  const map={CRITICAL_ALERT:['b-crit','CRITICAL_ALERT'],APPROVED:['b-ok','APPROVED'],
+    DOSSIER_INCOMPLET:['b-warn','DOSSIER INCOMPLET'],EN_COURS:['b-idle','EN COURS']};
+  const [c,l]=map[run.verdict]||map.EN_COURS;
+  document.getElementById('verdictBadge').innerHTML=`<span class="badge ${c}">${l}</span>`;
+}
+
+// ---------- État / polling ----------
+let runsCache=[], selected=null, lastSig='';
+function vBadge(v){const m={CRITICAL_ALERT:'b-crit',APPROVED:'b-ok',DOSSIER_INCOMPLET:'b-warn',EN_COURS:'b-idle'};
+  return `<span class="badge ${m[v]||'b-idle'}">${v.replace('_',' ')}</span>`;}
+
+function renderRuns(){
+  const box=document.getElementById('runs');
+  if(!runsCache.length){box.innerHTML='<div class="empty">Aucune exécution.</div>';return;}
+  box.innerHTML='';
+  runsCache.forEach(r=>{
+    const d=document.createElement('div');
+    d.className='run'+(selected===r.correlation_id?' sel':'');
+    d.innerHTML=`<div class="top"><span class="cid">${r.correlation_id}</span>${vBadge(r.verdict)}</div>
+      <div class="meta">${r.patient_id||'?'} · ${r.prescription_id||''} · ${r.nb_appels} appels · ${(r.fin||'').slice(11)}</div>`;
+    d.onclick=()=>{selected=r.correlation_id;renderRuns();replay(r);};
+    box.appendChild(d);
+  });
+}
+async function poll(){
+  try{
+    const {kpi,runs}=await (await fetch('/api/runs')).json();
+    document.getElementById('kRuns').textContent=kpi.runs;
+    document.getElementById('kCrit').textContent=kpi.critical;
+    document.getElementById('kOk').textContent=kpi.approved;
+    document.getElementById('kCalls').textContent=kpi.appels;
+    runsCache=runs;
+    const sig=runs.map(r=>r.correlation_id+r.nb_appels+r.verdict).join('|');
+    const changed=sig!==lastSig; lastSig=sig;
+    renderRuns();
+    if(changed && runs.length && document.getElementById('autoLive').checked){
+      selected=runs[0].correlation_id; renderRuns(); replay(runs[0]);
+    }
+  }catch(e){}
+}
+async function pollJournal(){
+  try{
+    const j=await (await fetch('/api/journal')).json();
+    const tb=document.getElementById('journal');
+    if(!j.length){tb.innerHTML='<tr><td colspan="6" class="empty">Journal vide.</td></tr>';return;}
+    tb.innerHTML='';
+    j.slice(-30).reverse().forEach(e=>{
+      const a1=(e.agent||'').includes('Triage');
+      const perm=e.permission||'', pc=perm.includes('ecriture_externe')?'x':perm.includes('ecriture')||perm.includes('suppression')?'w':'';
+      const ok=e.statut==='succes';
+      tb.innerHTML+=`<tr>
+        <td class="mono">${(e.date_heure||'').slice(11)}</td>
+        <td class="cid">${(e.correlation_id||'').slice(0,10)}</td>
+        <td><span class="tag ${a1?'a1':'a2'}">${a1?'Agent 1':'Agent 2'}</span></td>
+        <td class="mono">${e.outil||''}</td>
+        <td><span class="perm ${pc}">${perm}</span></td>
+        <td>${ok?'<span class="ok-i">✔ succès</span>':'<span class="err-i">✕ erreur</span>'}</td></tr>`;
+    });
+  }catch(e){}
+}
+async function pollPresc(){
+  try{
+    const p=await (await fetch('/api/prescriptions')).json();
+    const box=document.getElementById('presc');
+    if(!Array.isArray(p)||!p.length){box.innerHTML='<div class="empty">—</div>';return;}
+    const col={en_attente:'b-idle',validee:'b-ok',bloquee:'b-crit'};
+    box.innerHTML='';
+    p.forEach(o=>{
+      box.innerHTML+=`<div class="pill"><b>${o.prescription_id}</b> · ${o.patient_id}
+        <span class="badge ${col[o.statut]||'b-idle'}" style="margin-left:6px">${o.statut}</span>
+        <div style="color:var(--muted);font-size:11px;margin-top:3px">${(o.molecules||[]).join(', ')}</div></div>`;
+    });
+  }catch(e){}
+}
+
+document.getElementById('btnReplay').onclick=()=>{
+  const r=runsCache.find(x=>x.correlation_id===selected)||runsCache[0];
+  if(r){selected=r.correlation_id;renderRuns();replay(r);}
+};
+
+buildGraph(); resetGraph();
+poll(); pollJournal(); pollPresc();
+setInterval(poll,1500); setInterval(pollJournal,1500); setInterval(pollPresc,3000);
+</script>
+</body>
+</html>

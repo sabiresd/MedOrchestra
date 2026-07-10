@@ -203,6 +203,28 @@ Corréler des appels hors test : appelez `definir_correlation_id("mon-id")` en
 début de traitement, ou exportez `MCP_CORRELATION_ID` avant de lancer le
 serveur.
 
+## Tableau de bord temps réel
+
+`dashboard.py` sert une interface web (Starlette/uvicorn, **aucune dépendance
+supplémentaire**) qui lit le vrai `journal_mcp.json` et MongoDB :
+
+```bash
+python dashboard.py      # -> http://127.0.0.1:8050  (DASH_HOST / DASH_PORT configurables)
+```
+
+Elle affiche :
+- les **KPI** (ordonnances traitées, alertes critiques, traitements validés, appels MCP) ;
+- une **simulation animée du parcours BPMN** (Agent 1 — Triage SIH ⇆ Agent 2 —
+  Pharmacologue) : les nœuds s'allument au fil des appels réellement tracés,
+  et le verdict (`APPROVED` / `CRITICAL_ALERT`) est rejoué en direct ;
+- l'**historique** des exécutions regroupées par `correlation_id` (cliquables
+  pour rejouer le parcours) ;
+- l'**état des ordonnances** (`en_attente` / `validee` / `bloquee`) et le
+  **journal** des appels d'outils en flux continu (rafraîchi toutes les ~1,5 s).
+
+Pour la voir vivre : laisser le dashboard ouvert et lancer `python test_workflow.py`
+(ou envoyer une demande depuis AgenticAI) — le parcours s'anime en temps réel.
+
 ### Exemple de bout en bout
 
 L'ordonnance de démonstration **ORD-5567** (patient `P-1024` :
