@@ -1,0 +1,6 @@
+pymongo
+certifi
+mcp
+requests
+feedparser
+python-dotenv

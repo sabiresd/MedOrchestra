@@ -1,0 +1,22 @@
+# Secrets / configuration locale
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Logs / journaux d'exécution
+*.log
+server_run.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
