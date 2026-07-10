@@ -90,6 +90,22 @@
   .perm.w{background:var(--warn-bg);color:var(--warn)} .perm.x{background:var(--crit-bg);color:var(--crit)}
   .ok-i{color:var(--ok)} .err-i{color:var(--crit)}
   .empty{color:var(--muted);padding:20px;text-align:center}
+  /* --- Details panel --- */
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  .dbox{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .dbox h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .dbox.crit{border-color:#f2c4c4;background:var(--crit-bg)}
+  .dbox.ok{border-color:#bfe6cf;background:var(--ok-bg)}
+  .chip{display:inline-block;background:#eef3f4;border:1px solid var(--line);border-radius:16px;
+    padding:3px 10px;font-size:12px;margin:0 4px 4px 0}
+  .kv{font-size:13px;margin:3px 0} .kv b{color:var(--muted);font-weight:600}
+  .arrow{font-weight:800;color:var(--muted)}
+  table.dt{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+  table.dt th,table.dt td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+  .grav{font-size:10px;padding:2px 8px;border-radius:5px;font-weight:700}
+  .grav.majeure,.grav\.contre-indiquee{background:var(--crit-bg);color:var(--crit)}
+  .grav.moderee{background:var(--warn-bg);color:var(--warn)}
+  .grav.mineure{background:#eef1f2;color:var(--muted)}
   @media(max-width:980px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -132,6 +148,11 @@
       <h2>Historique des exécutions</h2>
       <div class="runs" id="runs"><div class="empty">Aucune exécution pour le moment.</div></div>
     </div>
+  </div>
+
+  <div class="card" id="detailsCard" style="margin-top:16px;display:none">
+    <h2>Détails de l'exécution sélectionnée</h2>
+    <div id="details"></div>
   </div>
 
   <div class="card" style="margin-top:16px">
@@ -256,21 +277,93 @@ function setVerdict(run){
   document.getElementById('verdictBadge').innerHTML=`<span class="badge ${c}">${l}</span>`;
 }
 
+// ---------- Détails d'une exécution ----------
+function renderDetails(run){
+  const c=document.getElementById('detailsCard'), box=document.getElementById('details');
+  if(!run){c.style.display='none';return;}
+  c.style.display='block';
+  const d=run.details||{}, p=d.patient||{};
+  let h=`<div style="margin-bottom:12px">${vBadge(run.verdict)}
+     <span style="color:var(--muted)">· ${run.patient_id||''} · ${run.prescription_id||''} · ${run.fin||''}</span></div><div class="dgrid">`;
+  if(d.patient) h+=`<div class="dbox"><h3>Patient</h3>
+     <div class="kv"><b>Nom</b> ${p.nom||''} ${p.prenom||''}</div>
+     <div class="kv"><b>Âge</b> ${p.age??'?'} ans · ${p.sexe||''}</div>
+     <div class="kv"><b>Allergies</b> ${(p.allergies||[]).join(', ')||'—'}</div>
+     <div class="kv"><b>Pathologies</b> ${(p.pathologies||[]).join(', ')||'—'}</div></div>`;
+  if((d.molecules||[]).length) h+=`<div class="dbox"><h3>Molécules prescrites</h3>
+     ${d.molecules.map(m=>`<span class="chip">${m}</span>`).join('')}</div>`;
+  if((d.interactions||[]).length){
+    h+=`<div class="dbox" style="grid-column:1/-1"><h3>Interactions détectées
+       ${d.risque_majeur?'· <span class="grav majeure">RISQUE MAJEUR</span>':''}</h3>
+       <table class="dt"><thead><tr><th>Molécule A</th><th>Molécule B</th><th>Gravité</th><th>Alternative</th><th>Description</th></tr></thead><tbody>`;
+    d.interactions.forEach(i=>{h+=`<tr><td>${i.molecule_a}</td><td>${i.molecule_b}</td>
+       <td><span class="grav ${(i.gravite||'').replace(/[^a-z]/g,'')}">${i.gravite||''}</span></td>
+       <td>${i.alternative||'—'}</td><td>${i.description||''}</td></tr>`;});
+    h+='</tbody></table></div>';
+  }
+  if(d.alternative && d.alternative.alternative) h+=`<div class="dbox ok"><h3>Alternative proposée</h3>
+     <div class="kv"><b>${d.alternative.molecule}</b> <span class="arrow">→</span> <b>${d.alternative.alternative}</b></div>
+     <div class="kv">${d.alternative.commentaire||d.alternative.description||''}</div></div>`;
+  if(d.action){const crit=d.action.type==='bloquee';
+    h+=`<div class="dbox ${crit?'crit':'ok'}"><h3>Action exécutée (Agent 1)</h3>
+     <div class="kv"><b>Ordonnance</b> ${crit?'BLOQUÉE (pilulier)':'VALIDÉE'}</div>
+     <div class="kv"><b>Statut</b> ${d.action.avant||'?'} <span class="arrow">→</span> ${d.action.apres||'?'}</div>
+     ${d.action.motif?`<div class="kv"><b>Motif</b> ${d.action.motif}</div>`:''}</div>`;}
+  if(d.sms) h+=`<div class="dbox crit"><h3>Notification médecin (SMS)</h3><div class="kv">${d.sms}</div></div>`;
+  box.innerHTML=h+'</div>';
+}
+
+// ---------- Synchronisation temps réel (SSE) ----------
+function jflag(txt,key){const m=(txt||'').match(new RegExp('"'+key+'"\\s*:\\s*(true|false)'));return m?m[1]==='true':null;}
+function lightNode(id){const e=document.getElementById('n_'+id);if(e){e.classList.remove('dim');e.classList.add('done');}}
+function lightEdgeLive(a,b){const e=edgeEl(a,b);if(e){e.setAttribute('stroke','#2f6df5');e.setAttribute('marker-end','url(#ahA)');e.setAttribute('stroke-width','2.4');}}
+let liveDone=[];
+function lightPath(ids){ids.forEach(id=>{if(!liveDone.includes(id)){
+  if(liveDone.length)lightEdgeLive(liveDone[liveDone.length-1],id);lightNode(id);liveDone.push(id);}});}
+function nodesForTool(tool,e){switch(tool){
+  case 'recuperer_dossier_patient':
+    return jflag(e.resultat,'dossier_valide')===false
+      ? ['a1_start','a1_recup','a1_gwvalid','a1_echec']
+      : ['a1_start','a1_recup','a1_gwvalid','a1_send'];
+  case 'analyser_interactions': return ['a2_start','a2_analyse','a2_gwrisk'];
+  case 'rechercher_alternative': return ['a2_alt','a2_crit'];
+  case 'bloquer_preparation_pilulier': return ['a2_report','a1_gwverd','a1_block'];
+  case 'envoyer_sms_medecin': return ['a1_sms','a1_reject'];
+  case 'valider_ordonnance': return ['a2_appr','a2_report','a1_gwverd','a1_valid','a1_okend'];
+} return [];}
+function onLiveEntry(e){
+  if(!document.getElementById('autoLive').checked || !e.outil) return;
+  replayToken++;                       // coupe tout replay en cours
+  if(e.outil==='recuperer_dossier_patient'){resetGraph();liveDone=[];}
+  const ids=nodesForTool(e.outil,e);
+  if(ids.length){
+    lightPath(ids);
+    document.getElementById('steplog').innerHTML=`⚡ <b>En direct</b> — <code>${e.outil}()</code> · ${e.agent||''} · ${(e.date_heure||'').slice(11)}`;
+    document.getElementById('liveTxt').textContent='Activité en direct';
+    setTimeout(()=>document.getElementById('liveTxt').textContent='En direct',1500);
+  }
+}
+function connectStream(){
+  const es=new EventSource('/api/stream');
+  es.addEventListener('reset',()=>{resetGraph();liveDone=[];});
+  es.onmessage=ev=>{try{onLiveEntry(JSON.parse(ev.data));}catch(_){}};
+}
+
 // ---------- État / polling ----------
-let runsCache=[], selected=null, lastSig='';
+let runsCache=[], selected=null, firstLoad=true;
 function vBadge(v){const m={CRITICAL_ALERT:'b-crit',APPROVED:'b-ok',DOSSIER_INCOMPLET:'b-warn',EN_COURS:'b-idle'};
   return `<span class="badge ${m[v]||'b-idle'}">${v.replace('_',' ')}</span>`;}
-
+function selectRun(r){selected=r.run_id;renderRuns();renderDetails(r);replay(r);}
 function renderRuns(){
   const box=document.getElementById('runs');
   if(!runsCache.length){box.innerHTML='<div class="empty">Aucune exécution.</div>';return;}
   box.innerHTML='';
   runsCache.forEach(r=>{
     const d=document.createElement('div');
-    d.className='run'+(selected===r.correlation_id?' sel':'');
+    d.className='run'+(selected===r.run_id?' sel':'');
     d.innerHTML=`<div class="top"><span class="cid">${r.correlation_id}</span>${vBadge(r.verdict)}</div>
       <div class="meta">${r.patient_id||'?'} · ${r.prescription_id||''} · ${r.nb_appels} appels · ${(r.fin||'').slice(11)}</div>`;
-    d.onclick=()=>{selected=r.correlation_id;renderRuns();replay(r);};
+    d.onclick=()=>selectRun(r);
     box.appendChild(d);
   });
 }
@@ -282,12 +375,10 @@ async function poll(){
     document.getElementById('kOk').textContent=kpi.approved;
     document.getElementById('kCalls').textContent=kpi.appels;
     runsCache=runs;
-    const sig=runs.map(r=>r.correlation_id+r.nb_appels+r.verdict).join('|');
-    const changed=sig!==lastSig; lastSig=sig;
     renderRuns();
-    if(changed && runs.length && document.getElementById('autoLive').checked){
-      selected=runs[0].correlation_id; renderRuns(); replay(runs[0]);
-    }
+    const sel=runs.find(r=>r.run_id===selected);
+    if(sel) renderDetails(sel);
+    if(firstLoad && runs.length){ firstLoad=false; selectRun(runs[0]); }  // aperçu initial
   }catch(e){}
 }
 async function pollJournal(){
@@ -326,11 +417,11 @@ async function pollPresc(){
 }
 
 document.getElementById('btnReplay').onclick=()=>{
-  const r=runsCache.find(x=>x.correlation_id===selected)||runsCache[0];
-  if(r){selected=r.correlation_id;renderRuns();replay(r);}
+  const r=runsCache.find(x=>x.run_id===selected)||runsCache[0];
+  if(r) selectRun(r);
 };
 
-buildGraph(); resetGraph();
+buildGraph(); resetGraph(); connectStream();
 poll(); pollJournal(); pollPresc();
 setInterval(poll,1500); setInterval(pollJournal,1500); setInterval(pollPresc,3000);
 </script>

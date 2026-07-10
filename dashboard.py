@@ -15,6 +15,7 @@ Lancement :
     -> http://127.0.0.1:8050   (configurable via DASH_HOST / DASH_PORT)
 """
 
+import asyncio
 import json
 import os
 import re
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import uvicorn
 from starlette.applications import Starlette
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.routing import Route
 
 from journal import JOURNAL_PATH
@@ -62,15 +63,76 @@ def _premier_arg(entree, cle):
     return None
 
 
-def _grouper_runs(journal):
-    """Regroupe les entrées du journal par correlation_id et dérive le verdict."""
-    runs = {}
+def _safe_json(texte):
+    try:
+        return json.loads(texte)
+    except Exception:
+        return None
+
+
+def _details(entries):
+    """Extrait les détails métier d'une exécution à partir des résultats tracés."""
+    d = {
+        "patient": None,
+        "molecules": [],
+        "risque_majeur": None,
+        "interactions": [],
+        "alternative": None,
+        "action": None,
+        "sms": None,
+    }
+    for e in entries:
+        outil = e.get("outil")
+        res = _safe_json(e.get("resultat"))
+        if outil == "recuperer_dossier_patient" and res:
+            d["patient"] = res.get("patient")
+            d["molecules"] = res.get("molecules") or d["molecules"]
+        elif outil == "analyser_interactions" and res:
+            d["risque_majeur"] = res.get("risque_majeur")
+            d["interactions"] = res.get("interactions_detectees") or d["interactions"]
+            d["molecules"] = res.get("molecules_analysees") or d["molecules"]
+        elif outil == "rechercher_alternative" and res:
+            d["alternative"] = res
+        elif outil == "bloquer_preparation_pilulier" and res:
+            av = (res.get("avant") or {}).get("statut")
+            ap = (res.get("apres") or {}).get("statut")
+            d["action"] = {"type": "bloquee", "avant": av, "apres": ap,
+                           "motif": (res.get("apres") or {}).get("motif_blocage")}
+        elif outil == "valider_ordonnance" and res:
+            av = (res.get("avant") or {}).get("statut")
+            ap = (res.get("apres") or {}).get("statut")
+            d["action"] = {"type": "validee", "avant": av, "apres": ap, "motif": None}
+        elif outil == "envoyer_sms_medecin":
+            d["sms"] = e.get("resultat")
+    return d
+
+
+def _segmenter(journal):
+    """Découpe le journal en exécutions : une nouvelle commence à chaque
+    recuperer_dossier_patient ou à chaque changement de correlation_id.
+    (Gère aussi les runs AgenticAI qui partagent un même correlation_id de session.)"""
+    segments = []
+    cur = None
     for e in journal:
         cid = e.get("correlation_id", "sans-id")
-        runs.setdefault(cid, []).append(e)
+        nouveau = (
+            cur is None
+            or e.get("outil") == "recuperer_dossier_patient"
+            or cid != cur["_cid"]
+        )
+        if nouveau:
+            cur = {"_cid": cid, "entries": []}
+            segments.append(cur)
+        cur["entries"].append(e)
+    return segments
 
+
+def _grouper_runs(journal):
+    """Découpe le journal en exécutions et dérive le verdict + les détails."""
     resultat = []
-    for cid, entries in runs.items():
+    for idx, seg in enumerate(_segmenter(journal)):
+        entries = seg["entries"]
+        cid = seg["_cid"]
         outils = [e.get("outil") for e in entries]
 
         # Verdict dérivé des outils réellement appelés / des drapeaux tracés.
@@ -118,6 +180,7 @@ def _grouper_runs(journal):
 
         resultat.append(
             {
+                "run_id": f"{cid}#{idx}",
                 "correlation_id": cid,
                 "verdict": verdict,
                 "patient_id": patient_id,
@@ -128,12 +191,13 @@ def _grouper_runs(journal):
                 "fin": entries[-1].get("date_heure"),
                 "nb_appels": len(entries),
                 "agents": sorted({e.get("agent") for e in entries if e.get("agent")}),
+                "details": _details(entries),
                 "entries": entries,
             }
         )
 
-    # Le plus récent en premier (par date de fin).
-    resultat.sort(key=lambda r: r["fin"] or "", reverse=True)
+    # Le plus récent en premier (par ordre d'apparition dans le journal).
+    resultat.reverse()
     return resultat
 
 
@@ -157,6 +221,33 @@ async def api_journal(request):
     return JSONResponse(_load_journal())
 
 
+async def api_stream(request):
+    """Flux SSE : pousse chaque nouvel appel d'outil dès qu'il est tracé dans le
+    journal → synchronisation en temps réel avec l'exécution (Langflow/AgenticAI)."""
+
+    async def gen():
+        last = len(_load_journal())
+        yield "retry: 2000\nevent: hello\ndata: {}\n\n"
+        while True:
+            if await request.is_disconnected():
+                break
+            journal = _load_journal()
+            if len(journal) < last:  # journal vidé -> on repart de zéro
+                last = 0
+                yield "event: reset\ndata: {}\n\n"
+            if len(journal) > last:
+                for e in journal[last:]:
+                    yield f"data: {json.dumps(e, ensure_ascii=False)}\n\n"
+                last = len(journal)
+            await asyncio.sleep(0.6)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 async def api_prescriptions(request):
     if get_collection is None:
         return JSONResponse([])
@@ -176,6 +267,7 @@ app = Starlette(
         Route("/", page),
         Route("/api/runs", api_runs),
         Route("/api/journal", api_journal),
+        Route("/api/stream", api_stream),
         Route("/api/prescriptions", api_prescriptions),
     ]
 )

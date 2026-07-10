@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 
 JOURNAL_PATH = Path(__file__).parent / "journal_mcp.json"
-_TAILLE_MAX_RESULTAT = 400  # caractères conservés dans le résultat
+_TAILLE_MAX_RESULTAT = 2000  # caractères conservés dans le résultat (détails complets)
 
 # --------------------------------------------------------------------------- #
 # Corrélation des requêtes
