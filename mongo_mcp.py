@@ -36,7 +36,13 @@ MONGODB_URI = os.environ.get(
 DB_NAME = os.environ.get("MONGODB_DB", "sih_mcp_db")
 
 # Instance unique du serveur MCP, partagée par tous les outils.
-mcp = FastMCP("SIH_Pharma_MCP")
+# L'hôte et le port sont configurables (utile pour exposer le serveur : bind
+# 0.0.0.0 derrière un tunnel/déploiement au lieu de 127.0.0.1).
+mcp = FastMCP(
+    "SIH_Pharma_MCP",
+    host=os.environ.get("MCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("MCP_PORT", "8000")),
+)
 
 
 def get_db():
