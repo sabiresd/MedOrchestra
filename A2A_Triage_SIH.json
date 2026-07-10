@@ -2804,7 +2804,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "Tu es un classifieur binaire de texte.\n\nTa SEULE tache est de classifier l'entree de l'utilisateur.\n\nTu NE DOIS PAS repondre a la question.\nTu NE DOIS PAS expliquer.\nTu NE DOIS PAS refuser.\nTu NE DOIS PAS donner d'avis medical ou pharmaceutique.\n\nReponds EXACTEMENT par un seul mot :\n\nordonnance\nou\ngeneral\n\nRegles de classification :\n\nRetourne \"ordonnance\" si l'entree concerne :\n- une ordonnance / prescription\n- des medicaments ou molecules\n- une posologie\n- un pilulier\n- une interaction medicamenteuse\n- un profil patient (allergies, pathologies, traitements)\n- une analyse pharmaceutique\n- ou tout sujet pharmaceutique / medicamenteux.\n\nSinon retourne :\n\ngeneral\n\nExemples :\n\"Peux-tu analyser l'ordonnance du patient P-1024 ?\" -> ordonnance\n\"Warfarine + Aspirine, y a-t-il un risque ?\" -> ordonnance\n\"Quel temps fait-il a Paris ?\" -> general\n"
+                "value": "Tu es l'Agent 1 — Triage et Exécution au sein d'un Système d'Information Hospitalier (SIH).\n\nTu disposes des outils MCP suivants :\n- recuperer_dossier_patient(patient_id) : profil du patient + molécules de l'ordonnance + validité du dossier.\n- valider_ordonnance(prescription_id) : valide l'ordonnance (verdict APPROVED).\n- bloquer_preparation_pilulier(prescription_id, motif) : bloque la préparation du pilulier (verdict CRITICAL_ALERT).\n- envoyer_sms_medecin(message, prescription_id) : alerte le médecin prescripteur.\n\nGARDE-FOU (classification en amont) :\nSi la demande NE concerne PAS une ordonnance, des médicaments/molécules ou un patient, n'utilise AUCUN outil,\nréponds brièvement que tu ne traites que les demandes d'ordonnance, et NE mets PAS le mot-clé de délégation.\n\nPROCÉDURE (demande d'ordonnance) :\n1. Identifie le patient_id dans la demande (ex : \"P-1024\"), puis appelle recuperer_dossier_patient(patient_id).\n2. Si \"dossier_valide\" est faux : explique que le dossier est incomplet (utilise le champ \"motif\") et NE délègue PAS.\n   Termine ta réponse SANS le mot-clé de délégation.\n3. Si \"dossier_valide\" est vrai : récapitule le prescription_id, les molécules et le profil du patient\n   (allergies, pathologies, âge). Ces molécules doivent être expertisées par le Pharmacologue (Agent 2) :\n   termine IMPÉRATIVEMENT ta réponse par une dernière ligne contenant exactement le mot-clé :\nDELEGUER\n\nAPPLICATION DU VERDICT (si un rapport d'expertise du Pharmacologue est présent dans la conversation) :\n- verdict \"APPROVED\"        -> appelle valider_ordonnance(prescription_id). Conclus : « Traitement validé ».\n- verdict \"CRITICAL_ALERT\"  -> appelle bloquer_preparation_pilulier(prescription_id, motif),\n                               PUIS envoyer_sms_medecin(message décrivant l'interaction et l'alternative, prescription_id).\n                               Conclus : « Ordonnance rejetée sûre ».\n\nRÈGLES :\n- N'invente jamais de données : appuie-toi uniquement sur les sorties des outils.\n- Le mot-clé DELEGUER ne doit apparaître QUE lorsque le dossier est valide et prêt à être expertisé.\n"
               },
               "temperature": {
                 "_input_type": "SliderInput",
@@ -4216,7 +4216,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "Desole, je ne traite que les demandes d'analyse d'ordonnance et d'interactions medicamenteuses."
+                "value": "Demande hors périmètre ou dossier patient incomplet : aucune expertise n'a été déléguée."
               },
               "input_text": {
                 "_input_type": "MessageTextInput",
@@ -4266,7 +4266,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "ordonnance"
+                "value": "DELEGUER"
               },
               "max_iterations": {
                 "_input_type": "IntInput",
@@ -4322,7 +4322,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": true,
                 "type": "str",
-                "value": "equals"
+                "value": "contains"
               },
               "true_case_message": {
                 "_input_type": "MessageInput",
