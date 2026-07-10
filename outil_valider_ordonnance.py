@@ -13,7 +13,7 @@ from mongo_mcp import get_collection, mcp
 
 
 @mcp.tool()
-@tracer("ecriture")
+@tracer("ecriture", agent="Agent 1 — Triage SIH")
 def valider_ordonnance(prescription_id: str) -> str:
     """Valide une ordonnance (verdict APPROVED du pharmacologue).
 

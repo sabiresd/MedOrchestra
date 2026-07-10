@@ -14,7 +14,7 @@ from mongo_mcp import get_collection, mcp
 
 
 @mcp.tool()
-@tracer("lecture")
+@tracer("lecture", agent="Agent 2 — Pharmacologue")
 def analyser_interactions(molecules: list[str]) -> str:
     """Analyse les interactions entre les molécules prescrites.
 

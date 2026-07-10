@@ -163,6 +163,46 @@ importez `A2A_Triage_SIH.json` et `A2A_Pharmacologue.json`, puis connectez le
 serveur MCP aux agents. Les agents se découvrent via l'action `discover` et
 échangent la demande d'expertise via `delegate`.
 
+## Tester le workflow
+
+Le script `test_workflow.py` rejoue **toute la logique BPMN** (Agent 1 ⇆
+Agent 2) en appelant réellement les outils MCP, avec un `correlation_id` par
+ordonnance. Il ré-initialise la base et vide le journal à chaque exécution, il
+est donc **rejouable** :
+
+```bash
+python test_workflow.py            # ordonnances de démo : CRITICAL_ALERT + APPROVED
+python test_workflow.py P-1024     # un patient précis
+python test_workflow.py --sms      # envoie réellement le SMS/e-mail médecin
+```
+
+En sortie, le journal `journal_mcp.json` montre, pour chaque appel, le
+`correlation_id` (qui relie les actions d'un même traitement) et l'`agent`
+délégué qui a exécuté l'outil :
+
+```json
+{
+  "date_heure": "2026-07-10 12:01:15",
+  "correlation_id": "21d113df79c0",
+  "agent": "Agent 2 — Pharmacologue",
+  "outil": "analyser_interactions",
+  "permission": "lecture",
+  "arguments": [["Warfarine", "Aspirine", "Oméprazole"]],
+  "statut": "succes",
+  "resultat": "{\"risque_majeur\": true, ...}"
+}
+```
+
+Pour **vider le journal** manuellement :
+
+```bash
+python journal.py                  # réécrit journal_mcp.json avec []
+```
+
+Corréler des appels hors test : appelez `definir_correlation_id("mon-id")` en
+début de traitement, ou exportez `MCP_CORRELATION_ID` avant de lancer le
+serveur.
+
 ### Exemple de bout en bout
 
 L'ordonnance de démonstration **ORD-5567** (patient `P-1024` :

@@ -27,7 +27,7 @@ MEDECIN_PAR_DEFAUT = os.environ.get("EMAIL_TO", "")
 
 
 @mcp.tool()
-@tracer("ecriture_externe")
+@tracer("ecriture_externe", agent="Agent 1 — Triage SIH")
 def envoyer_sms_medecin(message: str, medecin: str = "", prescription_id: str = "") -> str:
     """Envoie une alerte au médecin prescripteur (CRITICAL_ALERT).
 

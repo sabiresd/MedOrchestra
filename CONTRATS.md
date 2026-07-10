@@ -147,12 +147,16 @@ enregistrée dans chaque entrée du journal.
 ## Format du journal (`journal_mcp.json`)
 
 Le journal est un **tableau JSON indenté** (blocs lisibles), mis à jour à
-chaque appel d'outil. Une entrée reste concise :
+chaque appel d'outil. Chaque entrée porte un `correlation_id` (partagé par tous
+les appels d'un même traitement, pour relier Agent 1 et Agent 2) et l'`agent`
+délégué qui a exécuté l'outil :
 
 ```json
 [
   {
     "date_heure": "2026-07-10 13:15:04",
+    "correlation_id": "21d113df79c0",
+    "agent": "Agent 2 — Pharmacologue",
     "outil": "analyser_interactions",
     "permission": "lecture",
     "arguments": {
@@ -165,3 +169,7 @@ chaque appel d'outil. Une entrée reste concise :
 ```
 
 En cas d'échec, un champ `"erreur"` est ajouté à l'entrée.
+
+- `correlation_id` : défini via `definir_correlation_id()`, sinon la variable
+  d'environnement `MCP_CORRELATION_ID`, sinon un id de session.
+- Le journal se vide avec `vider_journal()` (ou `python journal.py`).

@@ -13,7 +13,7 @@ from mongo_mcp import get_collection, mcp
 
 
 @mcp.tool()
-@tracer("ecriture")
+@tracer("ecriture", agent="Agent 1 — Triage SIH")
 def bloquer_preparation_pilulier(prescription_id: str, motif: str = "") -> str:
     """Bloque la préparation du pilulier (verdict CRITICAL_ALERT).
 

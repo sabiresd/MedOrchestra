@@ -13,7 +13,7 @@ from mongo_mcp import get_collection, mcp
 
 
 @mcp.tool()
-@tracer("lecture")
+@tracer("lecture", agent="Agent 2 — Pharmacologue")
 def rechercher_alternative(molecule: str, molecule_en_conflit: str = "") -> str:
     """Recherche une alternative thérapeutique à une molécule à risque.
 

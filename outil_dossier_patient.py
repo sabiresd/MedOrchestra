@@ -14,7 +14,7 @@ from mongo_mcp import get_collection, mcp
 
 
 @mcp.tool()
-@tracer("lecture")
+@tracer("lecture", agent="Agent 1 — Triage SIH")
 def recuperer_dossier_patient(patient_id: str) -> str:
     """Récupère le dossier d'un patient et son ordonnance active.
 
