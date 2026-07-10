@@ -11,9 +11,10 @@ __pycache__/
 venv/
 env/
 
-# Logs / journaux d'exécution
+# Logs / journaux d'exécution (générés au runtime)
 *.log
 server_run.log
+journal_mcp.json
 
 # OS / IDE
 .DS_Store
